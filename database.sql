@@ -1,0 +1,667 @@
+-- Drop existing tables
+set foreign_key_checks = 0;
+drop table if exists has_booking;
+drop table if exists for_recervation;
+drop table if exists Booking;
+drop table if exists Payment;
+drop table if exists Recervation;
+drop table if exists Flight;
+drop table if exists WeeklySchedule;
+drop table if exists Day;
+drop table if exists for_year;
+drop table if exists Route;
+drop table if exists Airport;
+drop table if exists Passenger;
+drop table if exists Year;
+drop procedure if exists addYear;
+drop procedure if exists addDay;
+drop procedure if exists addDestination;
+drop procedure if exists addRoute;
+drop procedure if exists addFlight;
+drop procedure if exists calculateFreeSeats;
+drop procedure if exists calculatePrice;
+drop procedure if exists addReservation;
+drop procedure if exists addPassenger;
+drop procedure if exists addContact;
+drop procedure if exists addPayment;
+drop function if exists calculateFreeSeats;
+drop function if exists calculatePrice;
+drop trigger if exists generate_ticket_after_payment;
+drop view if exists allFlights;
+
+
+-- Passenger Table
+create table Passenger(
+    PassportNum int, 
+    FirstName varchar(30), 
+    LastName varchar(30), 
+    constraint pk_PassportNum primary key (PassportNum)
+) engine = InnoDB;
+
+-- Recervation Table
+create table Recervation(
+    RecervationNum int not null auto_increment, 
+    NumOfPassenger int, 
+    PassportNum int,
+    FlightID int,
+    PhoneNum bigint,
+    Email varchar(30),
+    constraint pk1_RecervationNum primary key (RecervationNum),
+    constraint fk1_PassportNum foreign key (PassportNum) references Passenger(PassportNum)
+) engine = InnoDB;
+
+-- for_recervation Table
+create table for_recervation(
+    PassportNum int,
+    RecervationNum int,
+    constraint pk_for_recervation primary key (PassportNum, RecervationNum),
+    constraint fk3_PassportNum foreign key (PassportNum) references Passenger(PassportNum),
+    constraint fk4_RecervationNum foreign key (RecervationNum) references Recervation(RecervationNum)
+) engine = InnoDB;
+
+-- Booking Table
+create table Booking(
+    RecervationNum int,
+    constraint pk2_RecervationNum primary key (RecervationNum),
+    constraint fk1_RecervationNum foreign key (RecervationNum) references Recervation(RecervationNum)
+) engine = InnoDB;
+
+-- has_booking Table
+create table has_booking(
+    TicketNum int,
+    PassportNum int, 
+    RecervationNum int,
+    constraint pk_TicketNum primary key (TicketNum),
+    constraint fk2_PassportNum foreign key (PassportNum) references Passenger(PassportNum),
+    constraint fk2_RecervationNum foreign key (RecervationNum) references Recervation(RecervationNum)
+) engine = InnoDB;
+
+-- Payment Table
+create table Payment(
+    PaymentID int not null auto_increment, 
+    CreditCardNum bigint,
+    CardholderName varchar(20),
+    Amount int,
+    RecervationNum int,
+    constraint pk_PaymentID primary key (PaymentID),
+    constraint fk3_RecervationNum foreign key (RecervationNum) references Recervation(RecervationNum)
+) engine = InnoDB;
+
+-- Flight Table
+create table Flight(
+    FlightID int, 
+    WeekNum int, 
+    ScheduleID int,
+    constraint pk_FlightID primary key (FlightID)
+) engine = InnoDB;
+
+alter table Recervation add constraint fk_FlightID foreign key (FlightID) references Flight(FlightID);
+alter table Flight modify FlightID int auto_increment;
+
+-- WeeklySchedule Table
+create table WeeklySchedule(
+    ScheduleID int, 
+    DepartureTime time,
+    DayID varchar(10), 
+    YearID int,
+    RouteID int,
+    constraint pk_ScheduleID primary key (ScheduleID)
+) engine = InnoDB;
+
+alter table Flight add constraint fk_ScheduleID foreign key (ScheduleID) references WeeklySchedule(ScheduleID);
+alter table WeeklySchedule modify ScheduleID int auto_increment;
+
+-- Day Table
+create table Day(
+    YearID int,
+    DayID varchar(10),  
+    WeekdayFactor double,
+    constraint pk_DayID primary key (DayID),
+    constraint fk1_YearID foreign key (YearID) references Year(YearID)
+) engine = InnoDB;
+
+alter table WeeklySchedule add constraint fk_DayID foreign key (DayID) references Day(DayID);
+alter table WeeklySchedule add constraint fk_YearID foreign key (YearID) references Day(YearID);
+
+-- Year Table
+create table Year(
+    YearID int, 
+    ProfitFactor double,
+    constraint pk1_YearID primary key (YearID)
+) engine = InnoDB;
+
+-- for_year Table
+create table for_year(
+    RoutePrice double,
+    YearID int,
+    RouteID int,
+    constraint pk_for_year primary key (YearID, RouteID),
+    constraint fk2_YearID foreign key (YearID) references Year(YearID)
+) engine = InnoDB;
+
+-- Route Table
+create table Route(
+    RouteID int, 
+    DepAirportCode varchar(3),
+    ArrAirportCode varchar(3),
+    constraint pk1_RouteID primary key (RouteID)
+) engine = InnoDB;
+
+alter table for_year add constraint fk1_RouteID foreign key (RouteID) references Route(RouteID);
+alter table WeeklySchedule add constraint fk2_RouteID foreign key (RouteID) references Route(RouteID);
+alter table Route modify RouteID int auto_increment;
+alter table Route add unique (DepAirportCode, ArrAirportCode);
+
+-- Airport Table
+create table Airport(
+    AirportCode varchar(3) not null, 
+    Name varchar(30),
+    Country varchar(30),
+    constraint pk_AirportCode primary key (AirportCode)
+) engine = InnoDB;
+
+alter table Route add constraint fk_ArrAirportCode foreign key (ArrAirportCode) references Airport(AirportCode);
+alter table Route add constraint fk_DepAirportCode foreign key (DepAirportCode) references Airport(AirportCode);
+
+
+-- Question 3
+DELIMITER //
+create procedure addYear(in year int, in factor double)
+begin
+    insert into Year(YearID, ProfitFactor)
+    values (year, factor);
+end //
+DELIMITER ;
+
+DELIMITER //
+create procedure addDay(in year int, in day varchar(10), in factor double)
+begin  
+    insert into Day(DayID, YearID, WeekdayFactor)
+    values (day, year, factor);
+end //
+DELIMITER ;
+
+DELIMITER //
+create procedure addDestination(
+    in airport_code varchar(3), 
+    in name varchar(30), 
+    in country varchar(30))
+begin   
+    insert into Airport(AirportCode, Name, Country)
+    values (airport_code, name, country);
+end //
+DELIMITER ;
+
+DELIMITER //
+create procedure addRoute(
+    in departure_airport_code varchar(3),
+    in arrival_airport_code varchar(3),
+    in year int,
+    in routeprice double)
+begin
+    insert into Route(DepAirportCode, ArrAirportCode)
+    values (departure_airport_code, arrival_airport_code)
+    on duplicate key update RouteID = last_insert_id(RouteID);
+
+    set @routeid = last_insert_id();
+
+    insert into for_year(RoutePrice, YearID, RouteID)
+    values (routeprice, year, @routeid)
+    on duplicate key update RoutePrice = values(RoutePrice);
+end //
+DELIMITER ;
+
+DELIMITER //
+create or replace procedure addFlight(
+    in departure_airport_code varchar(3),
+    in arrival_airport_code varchar(3),
+    in year int,
+    in day varchar(10),
+    in departure_time time)
+begin
+    declare route_id int;
+    declare shcedule_id int;
+    declare week_num int default 1;
+
+    insert into Route(DepAirportCode, ArrAirportCode)
+    values (departure_airport_code, arrival_airport_code)
+    on duplicate key update RouteID = last_insert_id(RouteID);
+
+    set route_id = last_insert_id();
+
+    insert into WeeklySchedule(DepartureTime, DayID, YearID, RouteID)
+    values (departure_time, day, year, route_id);
+
+    set shcedule_id = last_insert_id();
+
+    while week_num <= 52 do
+        insert into Flight(WeekNum, ScheduleID)
+        values (week_num, shcedule_id);
+
+        set week_num = week_num + 1;
+    end while;
+end //
+DELIMITER ;
+
+
+-- Question 4
+DELIMITER //
+create function calculateFreeSeats(flightnumber int)
+returns int
+deterministic
+begin  
+    declare total_seats int default 40;
+    declare booked_seats int default 0;
+    declare free_seats int;
+ 
+    select ifnull(sum(NumOfPassenger), 0)
+        into booked_seats
+        from Recervation
+    where FlightID = flightnumber;
+ 
+    set free_seats = total_seats - booked_seats;
+ 
+    return free_seats;
+end //
+DELIMITER ;
+ 
+DELIMITER //
+create function calculatePrice(flightnumber int)
+returns double
+deterministic
+begin
+    declare route_price double;
+    declare day_factor double;
+    declare year_factor double;
+    declare base_price double;
+    declare booked int;
+    declare result double;
+
+    select fy.RoutePrice,
+            d.WeekdayFactor,
+            y.ProfitFactor
+        into route_price, day_factor, year_factor
+        from Flight as f
+        join WeeklySchedule as ws on f.ScheduleID = ws.ScheduleID
+        join for_year as fy on fy.YearID = ws.YearID and fy.RouteID = ws.RouteID
+        join Day as d on d.DayID = ws.DayID
+        join Year as y on y.YearID = ws.YearID
+    where f.FlightID = flightnumber
+    limit 1;
+
+    set base_price = (route_price * day_factor * year_factor) / 40;
+
+    select ifnull(sum(NumOfPassenger), 0)
+        into booked
+        from Recervation
+    where FlightID = flightnumber;
+
+    set result = base_price * (booked + 1);
+    return result;
+end //
+DELIMITER ;
+
+
+-- Question 5
+DELIMITER //
+create trigger generate_ticket_after_payment
+after insert on Payment
+for each row
+begin   
+    declare reservation_id int;
+    declare passenger_id int;
+    declare ticket_number int;
+
+    declare done int default 0;
+    declare cur cursor for
+        select PassportNum
+        from for_recervation
+        where RecervationNum = new.RecervationNum;
+
+    declare continue handler for not found set done = 1;
+
+    open cur;
+
+    read_loop: loop
+        fetch cur into passenger_id;
+
+        if done then
+            leave read_loop;
+        end if;
+
+        repeat
+            set ticket_number = floor(rand() * 1000000);
+        until not exists (
+            select 1 from has_booking where TicketNum = ticket_number)
+        end repeat;
+
+        insert into has_booking(TicketNum, PassportNum, RecervationNum)
+        values (ticket_number, passenger_id, new.RecervationNum);
+    end loop;
+    close cur;
+end;
+//
+DELIMITER ;
+
+
+-- Question 6
+DELIMITER //
+create or replace procedure addReservation(
+    in departure_airport_code varchar(3),
+    in arrival_airport_code varchar(3),
+    in year int,
+    in week int,
+    in day varchar(10),
+    in time time,
+    in number_of_passengers int,
+    out output_reservation_nr int)
+begin
+    declare flight_id int;
+    declare total_seats int default 40;
+    declare booked_seats int default 0;
+    declare free_seats int;
+
+    start transaction;
+
+    select FlightID into flight_id
+    from Flight as f
+    join WeeklySchedule as ws on f.ScheduleID = ws.ScheduleID
+    join Route as r on ws.RouteID = r.RouteID
+    where r.DepAirportCode = departure_airport_code
+        and r.ArrAirportCode = arrival_airport_code
+        and ws.YearID = year
+        and f.WeekNum = week
+        and ws.DayID = day 
+        and ws.DepartureTime = time
+    limit 1;
+
+    if flight_id is null then
+        rollback;
+        signal sqlstate '45000' set message_text = 'There exist no flight for the given route, date and time';
+    end if;
+
+    select ifnull(sum(NumOfPassenger), 0) into booked_seats
+    from Recervation
+    where FlightID = flight_id
+    for update;
+
+    set free_seats = total_seats - booked_seats;
+
+    if free_seats < number_of_passengers then
+        rollback;
+        signal sqlstate '45000' set message_text = 'There are not enough seats available on the chosen flight';
+    end if;
+
+    insert into Recervation(NumOfPassenger, FlightID)
+    values (number_of_passengers, flight_id);
+
+    set output_reservation_nr = last_insert_id();
+
+    commit;
+end //
+DELIMITER ;
+
+DELIMITER //
+create or replace procedure addPassenger(
+    in reservation_nr int,
+    in passport_number int,
+    in name varchar(60))
+begin
+    declare reservation_exists int;
+    declare is_paid int;
+
+    select count(*) into reservation_exists
+    from Recervation
+    where RecervationNum = reservation_nr;
+
+    if reservation_exists = 0 then
+        signal sqlstate '45000' set message_text = 'The given reservation number does not exist';
+    end if;
+
+    select count(*) into is_paid
+    from Payment
+    where RecervationNum = reservation_nr;
+
+    if is_paid > 0 then
+        signal sqlstate '45000' set message_text = 'The booking has already been paid and no further passengers can be added';
+    end if;
+
+    insert into Passenger(PassportNum, FirstName, LastName)
+    values (passport_number, substring_index(name, ' ', 1), substring_index(name, ' ', -1))
+    on duplicate key update FirstName = FirstName;
+
+    insert into for_recervation(PassportNum, RecervationNum)
+    values (passport_number, reservation_nr);
+
+end //
+DELIMITER ;
+
+DELIMITER //
+create or replace procedure addContact(
+    in reservation_nr int,
+    in passport_number int,
+    in email varchar(30),
+    in phone bigint)
+begin
+    declare reservation_exists int;
+
+    select count(*) into reservation_exists
+    from for_recervation
+    where RecervationNum = reservation_nr;
+
+    if reservation_exists = 0 then
+        signal sqlstate '45000' set message_text = 'The given reservation number does not exist';
+    end if;
+
+    select count(*) into reservation_exists
+    from for_recervation
+    where RecervationNum = reservation_nr and PassportNum = passport_number;
+
+    if reservation_exists = 0 then
+        signal sqlstate '45000' set message_text = 'The person is not a passenger of the reservation';
+    end if;
+
+    update Recervation
+    set Email = email, PhoneNum = phone
+    where RecervationNum = reservation_nr;
+end //
+DELIMITER ;
+
+DELIMITER //
+create or replace procedure addPayment(
+    in reservation_nr int,
+    in cardholder_name varchar(20),
+    in credit_card_number bigint)
+begin
+    declare total_seats int default 40;
+    declare booked_seats int;
+    declare contact_exists int;
+    declare reservation_exists int;
+    declare flight_id int;
+    declare is_paid int;
+
+    start transaction;
+
+    select count(*) into reservation_exists
+    from Recervation
+    where RecervationNum = reservation_nr;
+
+    if reservation_exists = 0 then
+        signal sqlstate '45000' set message_text = 'The given reservation number does not exist';
+    end if;
+
+    select count(*) into contact_exists
+    from Recervation
+    where RecervationNum = reservation_nr and Email is not null and PhoneNum is not null;
+
+    if contact_exists = 0 then
+        signal sqlstate '45000' set message_text = 'The reservation has no contact yet';
+    end if;
+
+    select count(*) into is_paid
+    from Payment 
+    where RecervationNum = reservation_nr;
+
+    if is_paid > 0 then
+        signal sqlstate '45000' set message_text = 'The booking has already been payed and no futher passengers can be added';
+    end if;
+
+    select FlightID into flight_id
+    from Recervation
+    where RecervationNum = reservation_nr;
+
+    select count(*) into booked_seats
+    from for_recervation as fr
+    join Recervation as r on r.RecervationNum = fr.RecervationNum
+    where r.FlightID = flight_id;
+
+    if booked_seats > total_seats then
+        select 'There are not enough seats available on the flight anymore, deleting reservation' as message;
+        DELETE FROM for_recervation WHERE RecervationNum = reservation_nr;
+        DELETE FROM Booking WHERE RecervationNum = reservation_nr;
+        DELETE FROM has_booking WHERE RecervationNum = reservation_nr;
+        delete from Recervation where RecervationNum = reservation_nr;
+        commit;
+    end if;
+
+    insert into Payment(CreditCardNum, CardholderName, Amount, RecervationNum)
+    values (credit_card_number, cardholder_name, 100, reservation_nr);
+end //
+DELIMITER ;
+
+
+-- Question 7
+create or replace view allFlights as select distinct
+    depAirport.Name as departure_city_name,
+    arrAirport.Name as destination_city_name,
+    ws.DepartureTime as departure_time,
+    ws.DayID as departure_day,
+    f.WeekNum as departure_week,
+    ws.YearID as departure_year,
+    calculateFreeSeats(f.FlightID) as nr_of_free_seats,
+    calculatePrice(f.FlightID) as current_price_per_seat
+   
+    from Flight as f
+    join WeeklySchedule as ws on f.ScheduleID = ws.ScheduleID
+    join Route as r1 on ws.RouteID = r1.RouteID
+    join Airport as depAirport on r1.DepAirportCode = depAirport.AirportCode
+    join Airport as arrAirport on r1.ArrAirportCode = arrAirport.AirportCode
+    left join Recervation as r on r.FlightID = f.FlightID;
+
+
+/*
+-- Question 8
+a) 
+    Encryption: Encrypt the credit card data using strong encryption algorithms both at rest (stored in the database) and in transit.
+    Tokenization: Replace credit card data with a unique, non-sensitive token so the actual data is not stored.
+
+b)
+    Improved Performance: Stored procedures are executed directly on the database server, which reduces the amount of data sent between 
+    the application and the database. This can significantly improve performance, especially for complex operations.
+
+    Enhanced Security: Stored procedures help prevent SQL injection by allowing parameters to be passed safely. 
+    Also, access to the database can be restricted, so only the stored procedures can execute sensitive queries, not arbitrary SQL code.
+
+    Centralized Logic: Business logic is centralized within the database. This makes maintenance easier because changes to the logic 
+    only need to be made in one place (the stored procedure) rather than across multiple frontend clients.
+
+
+-- Question 9
+a) 
+    INSERT INTO Recervation (NumOfPassenger, PassportNum, FlightID, PhoneNum, Email) 
+    VALUES (3, 12345678, 1, 1234567890, 'test@example.com');
+    Query OK, 1 row affected (0.01 sec)
+
+b) 
+    SELECT * FROM Recervation;
+    Empty set (0.00 sec)
+
+    Result: The recervation is not visible.
+    Explanation: In SQL databases like MySQL with default isolation level REPEATABLE READ, changes made in a transaction 
+    are not visible to other sessions until the transaction is committed. Transactions in Session A remain “uncommitted,” 
+    so Session B does not see the data yet.
+
+c)
+    UPDATE Recervation 
+    SET PhoneNum = 999999999 
+    WHERE PassportNum = 12345678;   
+
+    Result: The query hang / got blocked beacude the row being modified is locked by the transaction in Session A.
+    Explanation: This behavior occurs due to transaction isolation, specifically the locking mechanism in the default REPEATABLE READ isolation level.        
+    Isolation ensures that transactions remain independent. Until Session A commits or rolls back its transaction:
+        Other sessions cannot see the uncommitted data.
+        Other sessions are blocked from modifying the locked rows to ensure data consistency.
+
+    To fix the issue:
+    In Session A:
+        COMMIT;
+        Query OK, 0 rows affected (0.00 sec)
+    In Session B:
+        UPDATE Recervation 
+        SET PhoneNum = 999999999 
+        WHERE PassportNum = 12345678;
+        Query OK, 1 row affected (0.00 sec)
+        Rows matched: 1  Changed: 1  Warnings: 0
+
+
+-- Question 10
+a)
+    After we run the scripts:
+    SELECT FlightID, COUNT(*) AS BookedSeats
+    FROM Recervation
+    WHERE FlightID = 1;
+    +----------+-------------+
+    | FlightID | BookedSeats |
+    +----------+-------------+
+    |        1 |           1 |
+    +----------+-------------+
+    1 row in set (0.00 sec)
+
+    No signs of overbooking
+
+b)
+    Yes, overbooking can theoretically occur if two transactions simultaneously check for available seats and both proceed to book without proper locking. 
+    This happens due to a race condition where both sessions read the same data before any updates are committed.
+
+c)
+    CALL addFlight('JFK', 'LAX', 2024, 'Monday', '10:00:00');
+    CALL addReservation('JFK', 'LAX', 2024, 1, 'Monday', '10:00:00', 1, @output_reservation_nr);
+    +----------+
+    | sleep(5) |
+    +----------+
+    |        0 |
+    +----------+
+    1 row in set (5.01 sec)
+    Query OK, 3 rows affected (5.01 sec)
+    SELECT COUNT(*) AS BookedSeats
+    FROM Recervation
+    WHERE FlightID = 1;
+    +----------+-------------+
+    | FlightID | BookedSeats |
+    +----------+-------------+
+    |        1 |           2 |
+    +----------+-------------+
+    1 row in set (0.00 sec)
+
+    no overbooking occured beacuse: The system or MySQL isolation level prevents concurrency issues.
+
+
+Identifying a Case for a Secondary Index
+Case:
+    In the Recervation table, the PassportNum column is frequently used in queries for searching reservations 
+    linked to a passenger. For example:
+        SELECT * 
+        FROM Recervation 
+        WHERE PassportNum = 12345678;
+    This query retrieves reservation details for a specific passenger using their passport number.
+
+Design of the Secondary Index:
+    The index would be designed as follows:
+        CREATE INDEX idx_passportnum ON Recervation (PassportNum);
+
+Motivation for the Design:
+    Filtering: Queries using WHERE PassportNum = ? will benefit significantly, as the database engine can use the 
+    index to directly locate matching rows.
+    Read-heavy Use Case: In a system where many queries search for reservations based on passport numbers, indexing this column reduces query time.
+    Minimal Overhead: Adding a secondary index on PassportNum is lightweight and will not interfere with existing constraints or table design.
+*/
