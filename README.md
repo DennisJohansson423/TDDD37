@@ -1,6 +1,6 @@
 # TDDD37
-Database Technology
-[Course Website](https://www.ida.liu.se/~TDDD37/index.en.shtml)
+
+The [Course Website](https://www.ida.liu.se/~TDDD37/index.en.shtml)
 
 ## What I Learned in This Course
 - SQL and Query Processing
